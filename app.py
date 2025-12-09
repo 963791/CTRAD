@@ -12,20 +12,21 @@ st.set_page_config(page_title='CTRAD — Pre-Transaction Risk Checker', layout='
 st.title('CTRAD — Pre-Transaction Risk & Anomaly Detection (Pre-transaction)')
 st.markdown('Check a transaction for risk BEFORE you send it. This is a prototype UI — models are pluggable.')
 
-
 with st.sidebar:
-st.header('Inputs')
-chain = st.selectbox('Chain', ['ethereum','bsc','polygon'], index=0)
-from_addr = st.text_input('Sender Address (from_addr)', value='0xSender...')
-to_addr = st.text_input('Recipient Address (to_addr)', value='0xRecipient...')
-token_symbol = st.text_input('Token Symbol', value='ETH')
-token_contract = st.text_input('Token Contract (optional)', value='')
-amount = st.number_input('Amount (in token units)', value=0.5, format='%f')
-amount_usd = st.number_input('Amount (USD)', value=800.0, format='%f')
-gas_price = st.number_input('Gas Price (Gwei)', value=50.0)
-check_button = st.button('Check Risk Before Sending')
-st.markdown('---')
-st.write('Tip: Use the sample data or connect an API later.')
+    st.header('Inputs')
+    chain = st.selectbox('Chain', ['ethereum','bsc','polygon'], index=0)
+    from_addr = st.text_input('Sender Address (from_addr)', value='0xSender...')
+    to_addr = st.text_input('Recipient Address (to_addr)', value='0xRecipient...')
+    token_symbol = st.text_input('Token Symbol', value='ETH')
+    token_contract = st.text_input('Token Contract (optional)', value='')
+    amount = st.number_input('Amount (in token units)', value=0.5, format='%f')
+    amount_usd = st.number_input('Amount (USD)', value=800.0, format='%f')
+    gas_price = st.number_input('Gas Price (Gwei)', value=50.0)
+
+    check_button = st.button('Check Risk Before Sending')
+    st.markdown('---')
+    st.write('Tip: Use the sample data or connect an API later.')
+
 
 
 col1, col2 = st.columns([2, 3])
