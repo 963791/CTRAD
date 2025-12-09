@@ -33,18 +33,18 @@ col1, col2 = st.columns([2, 3])
 
 
 with col1:
-st.subheader('Quick Info')
-st.write('Timestamp:', datetime.utcnow().isoformat() + 'Z')
-st.write('From:', from_addr)
-st.write('To:', to_addr)
-st.write('Token:', token_symbol)
-st.write('Amount (USD):', amount_usd)
-
+    st.subheader('Quick Info')
+    st.write('Timestamp:', datetime.utcnow().isoformat() + 'Z')
+    st.write('From:', from_addr)
+    st.write('To:', to_addr)
+    st.write('Token:', token_symbol)
+    st.write('Amount (USD):', amount_usd)
 
 with col2:
-st.subheader('Model & Settings')
-st.write('Model: CTRAD - Ensemble Prototype')
-st.write('Mode: Pre-transaction (fast checks + cached features)')
+    st.subheader('Model & Settings')
+    st.write('Model: CTRAD - Ensemble Prototype')
+    st.write('Mode: Pre-transaction (fast checks + cached features)')
+
 
 
 # Initialize feature builder and scorer
