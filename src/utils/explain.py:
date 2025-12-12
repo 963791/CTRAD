@@ -1,0 +1,27 @@
+# minimal SHAP explainer helper
+import shap
+
+def shap_explain(self, tx: Dict[str, Any]):
+    """Return top SHAP features for a single tx (dict) as list of dicts."""
+    if not self.has_lgbm or self.fb is None:
+        return []
+    try:
+        # build single-row features
+        df_row = pd.DataFrame([tx])
+        Xrow = self.fb.transform(df_row)
+        numeric_cols = [c for c in Xrow.columns if np.issubdtype(Xrow[c].dtype, np.number)]
+        Xrow = Xrow[numeric_cols].fillna(0.0)
+        # create TreeExplainer
+        expl = shap.TreeExplainer(self.lgbm)
+        shap_vals = expl.shap_values(Xrow)
+        # shap_vals is list (binary) or array; get absolute impacts
+        if isinstance(shap_vals, list):
+            sv = shap_vals[1][0]
+        else:
+            sv = shap_vals[0]
+        abs_imp = [(col, float(abs(val)), float(val)) for col, val in zip(numeric_cols, sv)]
+        abs_imp.sort(key=lambda x: x[1], reverse=True)
+        top = [{"feature": a[0], "impact": a[1], "value": float(Xrow[a[0]].iloc[0]), "signed": a[2]} for a in abs_imp[:6]]
+        return top
+    except Exception:
+        return []
