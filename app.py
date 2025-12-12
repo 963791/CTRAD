@@ -1,61 +1,105 @@
-# === Advanced Risk Meter UI (drop into app.py after scoring) ===
 import streamlit as st
 from datetime import datetime
 import pandas as pd
 
-# Plotly gauge helper (optional)
+st.set_page_config(page_title="CTRAD – Pre-Transaction Risk Engine", layout="wide")
+
+st.title("🔐 CTRAD — Pre-Transaction Risk & Anomaly Detection")
+st.write("Check a transaction for risk **BEFORE** sending it.")
+
+st.markdown("---")
+
+# ------------------------------
+# SECTION 1 — INPUT FORM
+# ------------------------------
+st.header("Input Transaction Details")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    from_addr = st.text_input("Sender Wallet", "0xSender...")
+    to_addr = st.text_input("Recipient Wallet", "0xRecipient...")
+    token_symbol = st.text_input("Token Symbol", "ETH")
+    amount_usd = st.number_input("Amount (USD)", value=800.0)
+
+with col2:
+    st.subheader("Quick Info")
+    st.write("Timestamp:", datetime.utcnow().isoformat() + "Z")
+
+    st.subheader("Model & Settings")
+    st.write("Model: CTRAD - Ensemble Prototype")
+    st.write("Mode: Pre-transaction risk scoring")
+
+st.markdown("---")
+
+# ======================================================
+# SECTION 2 — SCORER PLACEHOLDER (Replace with real model)
+# ======================================================
+
+# Since no real model yet → Fake but realistic output
+def fake_scorer():
+    return {
+        "risk_score": 25,   # 0–100
+        "risk_label": "safe",
+        "component_scores": {
+            "rules": 0.0,
+            "tabular": 0.1,
+            "sequence": 0.0,
+            "graph": 0.0,
+            "contract": 0.0
+        },
+        "top_features": [
+            {"feature": "amount_usd", "value": amount_usd, "impact": 0.1}
+        ],
+        "reason_text": "Amount is normal. No high-risk patterns detected.",
+        "action": "allow"
+    }
+
+# Run scoring when button is clicked
+if st.button("Run Risk Analysis"):
+    score_res = fake_scorer()
+else:
+    score_res = None
+
+# ------------------------------
+# SECTION 3 — RISK METER
+# ------------------------------
+
+# ======== GAUGE HELPER ==========
 def render_plotly_gauge(score: float):
     try:
         import plotly.graph_objects as go
-    except Exception:
-        return None  # caller will fallback to st.progress
+    except:
+        return None
 
-    # Bound score
-    val = max(0, min(100, float(score)))
+    value = max(0, min(100, float(score)))
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
-        value=val,
-        number={'suffix': " /100", 'font': {'size': 30}},
+        value=value,
+        number={'suffix': " /100", 'font': {'size': 28}},
         gauge={
-            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkgray"},
-            'bar': {'color': "darkblue", 'thickness': 0.25},
-            'bgcolor': "white",
+            'axis': {'range': [0, 100]},
+            'bar': {'color': "darkblue"},
             'steps': [
-                {'range': [0, 30], 'color': "#2ecc71"},    # green
-                {'range': [30, 60], 'color': "#f1c40f"},   # yellow
-                {'range': [60, 100], 'color': "#e74c3c"}   # red
+                {"range": [0, 30], "color": "#2ecc71"},
+                {"range": [30, 60], "color": "#f1c40f"},
+                {"range": [60, 100], "color": "#e74c3c"},
             ],
-            'threshold': {
-                'line': {'color': "black", 'width': 4},
-                'thickness': 0.75,
-                'value': val
-            }
-        },
-        domain={'x': [0, 1], 'y': [0, 1]}
+        }
     ))
-    fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=350)
+    fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10))
     return fig
 
+
 def render_risk_meter(score: float):
-    """Render gauge or fallback progress bar and return action color/text."""
     fig = render_plotly_gauge(score)
-    if fig is not None:
+    if fig:
         st.plotly_chart(fig, use_container_width=True)
     else:
-        # fallback
-        st.progress(int(max(0, min(100, score))))
-        st.write(f"Risk Score: **{score} / 100**")
+        st.progress(int(score))
 
-# Present compact component cards
-def render_component_cards(component_scores: dict):
-    cols = st.columns(len(component_scores))
-    for (k, v), col in zip(component_scores.items(), cols):
-        with col:
-            v_pct = int(round(v * 100)) if (0 <= v <= 1) else int(v if v <= 100 else min(100, v))
-            st.metric(label=k.capitalize(), value=f"{v_pct}%", delta=None)
-
-# Suggested action mapping
+# ======== ACTION BADGE ==========
 def action_from_score(score: float):
     if score >= 85:
         return ("BLOCK", "❌", "#ff4b4b")
@@ -64,78 +108,66 @@ def action_from_score(score: float):
     else:
         return ("ALLOW", "✅", "#2ecc71")
 
-# --- Main results rendering (use the scorer output) ---
-# Example: score_res = scorer.score_pre_transaction(tx, features)
-# Make sure `score_res` has keys: risk_score, risk_label, component_scores, top_features, reason_text, action
+# ======== COMPONENT CARDS ==========
+def render_component_cards(component_scores: dict):
+    cols = st.columns(len(component_scores))
+    for (name, val), col in zip(component_scores.items(), cols):
+        pct = int(val * 100)
+        with col:
+            st.metric(name.capitalize(), f"{pct}%")
 
-if 'score_res' in globals():
-    result = score_res
-else:
-    # Defensive fallback: if variable isn't present, create a dummy safe result
-    result = {
-        'risk_score': 10,
-        'risk_label': 'safe',
-        'component_scores': {'rules': 0.0, 'tabular': 0.1, 'sequence': 0.0, 'graph': 0.0, 'contract': 0.0},
-        'top_features': [{'feature': 'amount_usd', 'value': 800.0, 'impact': 0.1}],
-        'reason_text': 'Fallback: no scorer available.',
-        'action': 'allow'
-    }
+# ------------------------------
+# SECTION 4 — SHOW RESULTS
+# ------------------------------
 
-risk_score = result.get('risk_score', 0)
-component_scores = result.get('component_scores', {})
-top_features = result.get('top_features', [])
-reason_text = result.get('reason_text', '')
-label = result.get('risk_label', '').upper()
+if score_res:
 
-st.markdown("---")
-st.header("🔍 Risk Analysis Result")
-st.write(f"**Label:** {label}")
+    st.markdown("---")
+    st.header("🔍 Risk Analysis Result")
 
-# Gauge / Progress
-render_risk_meter(risk_score)
+    label = score_res.get("risk_label", "").upper()
+    risk_score = score_res.get("risk_score", 0)
+    comp_scores = score_res.get("component_scores", {})
+    top_features = score_res.get("top_features", [])
+    reason_text = score_res.get("reason_text", "")
 
-# Suggested action badge
-action_text, action_icon, action_color = action_from_score(risk_score)
-badge_col1, badge_col2 = st.columns([1, 4])
-with badge_col1:
+    st.write(f"**Label:** {label}")
+
+    render_risk_meter(risk_score)
+
+    # Action
+    action_text, action_icon, action_color = action_from_score(risk_score)
     st.markdown(
         f"""
-        <div style='display:flex;align-items:center;justify-content:center'>
-            <div style='background:{action_color};color:white;padding:10px 16px;border-radius:8px;font-weight:700'>
-                {action_icon} {action_text}
-            </div>
+        <div style='background:{action_color};color:white;padding:12px;border-radius:8px;
+        width:160px;font-weight:bold;text-align:center'>
+        {action_icon} {action_text}
         </div>
         """,
         unsafe_allow_html=True
     )
-with badge_col2:
+
     st.write(f"**Reason:** {reason_text}")
 
-# Component mini-cards
-st.subheader("Component Scores")
-render_component_cards(component_scores)
+    # Component Scores
+    st.subheader("Component Scores")
+    render_component_cards(comp_scores)
 
-# Top features & explanation
-st.subheader("Top Contributing Features")
-if isinstance(top_features, list) and top_features:
-    # show as dataframe for clarity
-    try:
-        df_feats = pd.DataFrame(top_features)
-        # ensure columns presence
-        if 'impact' not in df_feats.columns:
-            df_feats['impact'] = df_feats.get('impact', 0)
-        st.table(df_feats)
-    except Exception:
-        # fallback rendering
-        for f in top_features:
-            st.write(f"- {f}")
-else:
-    st.write("No top features available.")
+    # Top Features
+    st.subheader("Top Contributing Features")
+    if top_features:
+        try:
+            df = pd.DataFrame(top_features)
+            st.table(df)
+        except:
+            st.write(top_features)
+    else:
+        st.write("No feature explanations available.")
 
-# Compact timeline or sparkline (optional placeholder)
-st.subheader("Recent Flags / History")
-st.write("Recent flagged events and history will be shown here. (Connect to DB or history cache.)")
+    # History placeholder
+    st.subheader("Recent Flags / History")
+    st.write("History will appear here once DB/Cache is connected.")
 
-# Expand for full JSON
-with st.expander("Full scoring JSON"):
-    st.json(result)
+    # JSON
+    with st.expander("Full Scoring JSON"):
+        st.json(score_res)
