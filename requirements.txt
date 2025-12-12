@@ -7,3 +7,5 @@ node2vec
 pyvis
 joblib
 plotly
+python-dotenv
+
