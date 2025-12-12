@@ -1,85 +1,109 @@
-# src/scoring/score.py
+from datetime import datetime
 
-def rule_based_score(transaction):
+# Import rule-based model
+from .rules import RuleEngine
+
+# Import sequence anomaly model (Step 3)
+from .sequence import SequenceModel
+
+
+class Scorer:
     """
-    Apply rule-based checks and return:
-    - score (0–1)
-    - reasons (list of triggered rule messages)
-    """
-
-    reasons = []
-    score = 0.0
-
-    amount = float(transaction.get("amount_usd", 0))
-    txn_type = transaction.get("transaction_type", "").lower()
-    wallet = transaction.get("wallet_age_days", 9999)
-    country = transaction.get("origin_country", "")
-    freq = transaction.get("daily_txn_count", 0)
-
-    # ---- RULE 1: High Transaction Amount ----
-    if amount > 10000:
-        score += 0.6
-        reasons.append(f"High-value transaction: ${amount}")
-
-    elif amount > 5000:
-        score += 0.3
-        reasons.append(f"Medium-risk amount: ${amount}")
-
-    # ---- RULE 2: Suspicious Transaction Types ----
-    suspicious_types = ["mixing", "anonymizer", "privacy"]
-    if txn_type in suspicious_types:
-        score += 0.4
-        reasons.append(f"Suspicious transaction type detected: {txn_type}")
-
-    # ---- RULE 3: Very New Wallet ----
-    if wallet < 7:
-        score += 0.4
-        reasons.append(f"New wallet age: {wallet} days")
-
-    elif wallet < 30:
-        score += 0.2
-        reasons.append(f"Wallet is new-ish: {wallet} days")
-
-    # ---- RULE 4: High Transaction Frequency ----
-    if freq > 20:
-        score += 0.5
-        reasons.append(f"High daily transaction count: {freq}")
-
-    elif freq > 10:
-        score += 0.2
-        reasons.append(f"Increased daily transaction activity: {freq}")
-
-    # ---- RULE 5: High-Risk Country ----
-    risky_countries = ["North Korea", "Russia", "Iran"]
-    if country in risky_countries:
-        score += 0.5
-        reasons.append(f"High-risk country detected: {country}")
-
-    # ---- Final score clamp ----
-    score = min(score, 1.0)
-
-    return score, reasons
-
-
-
-def combine_scores(rule_score, tab_score=0, seq_score=0, graph_score=0):
-    """
-    Weighted score combination.
-    Modify weights here as ML models are added.
+    CTRAD Scoring Engine
+    Combines: rules, sequence anomaly, and placeholders for
+    tabular ML, graph ML, and contract audits.
     """
 
-    weights = {
-        "rules": 0.6,
-        "tabular": 0.2,
-        "sequence": 0.1,
-        "graph": 0.1,
-    }
+    def __init__(self):
+        self.rule_engine = RuleEngine()
+        self.sequence_model = SequenceModel()   # Step 3 model
 
-    combined = (
-        rule_score * weights["rules"]
-        + tab_score * weights["tabular"]
-        + seq_score * weights["sequence"]
-        + graph_score * weights["graph"]
-    )
+    def score(self, params):
+        """
+        params: dictionary containing
+        {
+            "from_addr",
+            "to_addr",
+            "amount_usd",
+            "token_symbol",
+            "chain_id",
+            "history_amounts": list of past amounts,
+            ...
+        }
+        """
 
-    return min(combined, 1.0)
+        amount_usd = params.get("amount_usd", 0)
+        from_addr = params.get("from_addr", "")
+        to_addr = params.get("to_addr", "")
+        token = params.get("token_symbol", "")
+        chain_id = params.get("chain_id", "")
+
+        # -----------------------------
+        # 1) RULE-BASED CHECKS (Step 1)
+        # -----------------------------
+        rule_label, rule_score, rule_reason = self.rule_engine.check(
+            from_addr=from_addr,
+            to_addr=to_addr,
+            amount_usd=amount_usd,
+            token_symbol=token
+        )
+
+        # -----------------------------------------
+        # 2) SEQUENCE ANOMALY MODEL (Step 3)
+        # -----------------------------------------
+        sequence_risk = self.sequence_model.predict(
+            history_amounts=params.get("history_amounts", []),
+            current_amount=amount_usd
+        )
+
+        # ------------------------------------------------------
+        # 3) Tabular ML model (placeholder — Step 4 will update)
+        # ------------------------------------------------------
+        tabular_risk = 0.10  # default placeholder
+
+        # ------------------------------------------------------
+        # 4) Graph ML (placeholder — Step 5 will update)
+        # ------------------------------------------------------
+        graph_risk = 0.0
+
+        # ------------------------------------------------------
+        # 5) Contract audit & flags (placeholder — Step 6)
+        # ------------------------------------------------------
+        contract_risk = 0.0
+
+        # ---------------------------
+        # Weighted Risk Combination
+        # ---------------------------
+        total_risk = (
+            0.30 * rule_score +
+            0.25 * sequence_risk +
+            0.25 * tabular_risk +
+            0.10 * graph_risk +
+            0.10 * contract_risk
+        )
+
+        # Determine label
+        if total_risk >= 0.70:
+            label = "HIGH RISK"
+        elif total_risk >= 0.40:
+            label = "MEDIUM RISK"
+        else:
+            label = "SAFE"
+
+        result = {
+            "label": label,
+            "overall_score": float(total_risk),
+
+            "components": {
+                "rules": float(rule_score),
+                "sequence": float(sequence_risk),
+                "tabular": float(tabular_risk),
+                "graph": float(graph_risk),
+                "contract": float(contract_risk),
+            },
+
+            "rule_reason": rule_reason,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+
+        return result
