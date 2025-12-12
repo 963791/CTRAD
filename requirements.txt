@@ -8,4 +8,4 @@ pyvis
 joblib
 plotly
 python-dotenv
-
+python-dateutil
