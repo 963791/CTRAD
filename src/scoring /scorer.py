@@ -1,109 +1,180 @@
-from datetime import datetime
+# ================================
+# CTRAD — SCORING ENGINE (FULL)
+# ================================
 
-# Import rule-based model
-from .rules import RuleEngine
-
-# Import sequence anomaly model (Step 3)
-from .sequence import SequenceModel
+from typing import Dict, List, Tuple
+from .tabular import TabularModel
 
 
-class Scorer:
+class CTRADScorer:
     """
-    CTRAD Scoring Engine
-    Combines: rules, sequence anomaly, and placeholders for
-    tabular ML, graph ML, and contract audits.
+    Main scoring engine combining:
+    - Rule-based scoring
+    - Sequence anomaly scoring
+    - Tabular ML (RandomForest)
+    - (Graph + Contract models added later)
     """
 
     def __init__(self):
-        self.rule_engine = RuleEngine()
-        self.sequence_model = SequenceModel()   # Step 3 model
+        # ML model
+        self.tabular_model = TabularModel()
 
-    def score(self, params):
+    # ----------------------------
+    # RULE ENGINE
+    # ----------------------------
+    def apply_rules(self, tx: dict) -> Tuple[float, List[str]]:
+        amount = tx.get("amount_usd", 0)
+        token = tx.get("token_symbol", "").upper()
+        flags = []
+        score = 0
+
+        # Rule 1 — Large amount
+        if amount > 10_000:
+            score += 0.4
+            flags.append("High-value transfer")
+        elif amount > 5_000:
+            score += 0.25
+            flags.append("Medium-high value transfer")
+
+        # Rule 2 — Risky tokens
+        risky_tokens = {"SHIB", "PEPE", "FLOKI", "ELON", "SQUID", "LUNA2"}
+        if token in risky_tokens:
+            score += 0.35
+            flags.append("High-volatility token")
+
+        # Rule 3 — Unknown token (not common)
+        common = {"ETH", "USDT", "USDC", "BNB", "BTC"}
+        if token not in common and token not in risky_tokens:
+            score += 0.05
+            flags.append("Unrecognized token")
+
+        # Cap score
+        return min(score, 1.0), flags
+
+    # ----------------------------
+    # SEQUENCE ANOMALY MODEL
+    # ----------------------------
+    def sequence_anomaly(self, tx: dict) -> float:
         """
-        params: dictionary containing
-        {
-            "from_addr",
-            "to_addr",
-            "amount_usd",
-            "token_symbol",
-            "chain_id",
-            "history_amounts": list of past amounts,
+        Lightweight anomaly score.
+        """
+        amount = tx.get("amount_usd", 0)
+        token = tx.get("token_symbol", "").upper()
+
+        risk = 0.0
+
+        # Spike behavior
+        if amount > 3000:
+            risk += 0.2
+        if amount < 5:
+            risk += 0.1
+
+        # Volatile tokens
+        volatile = {"DOGE", "SHIB", "PEPE"}
+        if token in volatile:
+            risk += 0.15
+
+        return min(risk, 1.0)
+
+    # ----------------------------
+    # TABULAR ML MODEL (RandomForest)
+    # ----------------------------
+    def tabular_predict(self, tx: dict) -> float:
+        return self.tabular_model.predict(
+            amount_usd=tx.get("amount_usd", 0),
+            token_symbol=tx.get("token_symbol", "ETH"),
+            from_addr=tx.get("from_addr", "").lower()
+        )
+
+    # ----------------------------
+    # COMBINE + FINAL SCORE
+    # ----------------------------
+    def aggregate_scores(
+        self,
+        rules: float,
+        seq: float,
+        tab: float
+    ) -> float:
+        """
+        Weighted combination.
+        """
+        final = (
+            0.45 * rules +
+            0.25 * seq +
+            0.30 * tab
+        )
+        return round(final * 100, 2)
+
+    # ----------------------------
+    # HUMAN-READABLE LABEL
+    # ----------------------------
+    def classify(self, score: float) -> str:
+        if score >= 85:
+            return "high-risk"
+        elif score >= 60:
+            return "medium-risk"
+        else:
+            return "safe"
+
+    # ----------------------------
+    # MAIN ENTRY (USED BY app.py)
+    # ----------------------------
+    def score_pre_transaction(self, tx: dict, features: dict = None) -> Dict:
+        """
+        Main scoring endpoint.
+        tx: {
+            from_addr,
+            to_addr,
+            token_symbol,
+            amount_usd,
             ...
         }
         """
 
-        amount_usd = params.get("amount_usd", 0)
-        from_addr = params.get("from_addr", "")
-        to_addr = params.get("to_addr", "")
-        token = params.get("token_symbol", "")
-        chain_id = params.get("chain_id", "")
+        # Component scores
+        rules_score, rule_flags = self.apply_rules(tx)
+        seq_score = self.sequence_anomaly(tx)
+        tab_score = self.tabular_predict(tx)
 
-        # -----------------------------
-        # 1) RULE-BASED CHECKS (Step 1)
-        # -----------------------------
-        rule_label, rule_score, rule_reason = self.rule_engine.check(
-            from_addr=from_addr,
-            to_addr=to_addr,
-            amount_usd=amount_usd,
-            token_symbol=token
-        )
+        # Aggregate
+        final_score = self.aggregate_scores(rules_score, seq_score, tab_score)
+        label = self.classify(final_score)
 
-        # -----------------------------------------
-        # 2) SEQUENCE ANOMALY MODEL (Step 3)
-        # -----------------------------------------
-        sequence_risk = self.sequence_model.predict(
-            history_amounts=params.get("history_amounts", []),
-            current_amount=amount_usd
-        )
-
-        # ------------------------------------------------------
-        # 3) Tabular ML model (placeholder — Step 4 will update)
-        # ------------------------------------------------------
-        tabular_risk = 0.10  # default placeholder
-
-        # ------------------------------------------------------
-        # 4) Graph ML (placeholder — Step 5 will update)
-        # ------------------------------------------------------
-        graph_risk = 0.0
-
-        # ------------------------------------------------------
-        # 5) Contract audit & flags (placeholder — Step 6)
-        # ------------------------------------------------------
-        contract_risk = 0.0
-
-        # ---------------------------
-        # Weighted Risk Combination
-        # ---------------------------
-        total_risk = (
-            0.30 * rule_score +
-            0.25 * sequence_risk +
-            0.25 * tabular_risk +
-            0.10 * graph_risk +
-            0.10 * contract_risk
-        )
-
-        # Determine label
-        if total_risk >= 0.70:
-            label = "HIGH RISK"
-        elif total_risk >= 0.40:
-            label = "MEDIUM RISK"
+        # Reason text
+        if rule_flags:
+            reason = ", ".join(rule_flags)
         else:
-            label = "SAFE"
+            reason = "No significant warnings."
 
-        result = {
-            "label": label,
-            "overall_score": float(total_risk),
+        # Format top features
+        top_features = [
+            {"feature": "Rules engine", "value": "", "impact": round(rules_score, 3)},
+            {"feature": "Sequence anomaly", "value": "", "impact": round(seq_score, 3)},
+            {"feature": "Tabular ML model", "value": "", "impact": round(tab_score, 3)},
+        ]
 
-            "components": {
-                "rules": float(rule_score),
-                "sequence": float(sequence_risk),
-                "tabular": float(tabular_risk),
-                "graph": float(graph_risk),
-                "contract": float(contract_risk),
-            },
-
-            "rule_reason": rule_reason,
-            "timestamp": datetime.utcnow().isoformat() + "Z"
+        # Component scores (for UI cards)
+        components = {
+            "rules": round(rules_score, 3),
+            "sequence": round(seq_score, 3),
+            "tabular": round(tab_score, 3),
+            "graph": 0.0,
+            "contract": 0.0
         }
 
-        return result
+        # Suggested action
+        if final_score >= 85:
+            action = "block"
+        elif final_score >= 60:
+            action = "warn"
+        else:
+            action = "allow"
+
+        return {
+            "risk_score": final_score,
+            "risk_label": label,
+            "component_scores": components,
+            "top_features": top_features,
+            "reason_text": reason,
+            "action": action
+        }
