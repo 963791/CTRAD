@@ -1,3 +1,46 @@
+import joblib
+import numpy as np
+import os
+
+# inside Scorer.__init__(self):
+try:
+    self.lgbm = joblib.load('models/model_lgbm_v1.pkl')
+    self.fb = joblib.load('models/feature_builder_v1.pkl')
+    self.has_lgbm = True
+except Exception:
+    self.lgbm = None
+    self.fb = None
+    self.has_lgbm = False
+
+# create a helper to get tabular probability
+def tabular_prob(self, tx: Dict[str, Any], features: Dict[str, Any]) -> float:
+    # features: can be used, but better to use stored fb to create same columns
+    try:
+        if self.has_lgbm and self.fb:
+            # Build a single-row dataframe using fb
+            df_row = pd.DataFrame([tx])  # include amount_usd, token_contract, etc
+            Xrow = self.fb.transform(df_row)
+            # select numeric features used in training; fallback to amount_usd
+            numeric_cols = [c for c in Xrow.columns if np.issubdtype(Xrow[c].dtype, np.number)]
+            if not numeric_cols:
+                return 0.0
+            Xrow = Xrow[numeric_cols].fillna(0.0)
+            prob = float(self.lgbm.predict(Xrow)[0])
+            return max(0.0, min(1.0, prob))
+    except Exception:
+        pass
+    # fallback heuristic mapping (similar to previously)
+    amt = float(tx.get('amount_usd') or 0.0)
+    if amt <= 1000:
+        return 0.05
+    elif amt <= 10000:
+        return 0.2
+    elif amt <= 100000:
+        return 0.5
+    else:
+        return 0.85
+
+
 # src/scoring/scorer.py
 import math
 from typing import Dict, Any, List
